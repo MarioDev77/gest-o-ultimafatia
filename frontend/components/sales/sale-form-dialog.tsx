@@ -110,7 +110,10 @@ export function SaleFormDialog({
           items: validItems.map((row) => ({
             productId: row.productId,
             quantity: Number.parseInt(row.quantity, 10),
-            unitPriceCents: centsFromInput(row.unitPrice),
+            // Campo vazio -> não manda o campo, pra o backend cair no preço de
+            // catálogo do produto (ou recusar a venda se o produto não tiver
+            // preço cadastrado). Antes isso virava 0 e a venda saía de graça.
+            unitPriceCents: row.unitPrice.trim() ? centsFromInput(row.unitPrice) : undefined,
           })),
           paymentMethod,
           amountReceivedCents: paymentMethod === "dinheiro" ? amountReceivedCents : undefined,

@@ -5,6 +5,17 @@ function money(cents: number) {
   return cents / 100
 }
 
+// Mesmo fuso configurado na conexão do banco (ver backend/src/db/pool.ts) — sem
+// isso, o servidor formata a data/hora no seu próprio fuso (normalmente UTC),
+// mostrando um horário até 3h adiantado (ou o dia errado) no relatório.
+const TZ = "America/Bahia"
+function formatDateTime(value: string | Date) {
+  return new Date(value).toLocaleString("pt-BR", { timeZone: TZ })
+}
+function formatDate(value: string | Date) {
+  return new Date(value).toLocaleDateString("pt-BR", { timeZone: TZ })
+}
+
 const MONEY_FORMAT = '"R$" #,##0.00'
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -64,7 +75,7 @@ export async function buildExcelReport(type: ReportType, data: any): Promise<Exc
       for (const s of data.sales) {
         sheet.addRow({
           n: s.sale_number,
-          dt: new Date(s.sale_datetime).toLocaleString("pt-BR"),
+          dt: formatDateTime(s.sale_datetime),
           customer: s.customer_name ?? "-",
           payment: s.payment_method,
           subtotal: money(s.subtotal_cents),
@@ -101,7 +112,7 @@ export async function buildExcelReport(type: ReportType, data: any): Promise<Exc
           desc: e.description,
           cat: CATEGORY_LABELS[e.category] ?? e.category,
           amount: money(e.amount_cents),
-          date: new Date(e.expense_date).toLocaleDateString("pt-BR"),
+          date: formatDate(e.expense_date),
           payment: e.payment_method,
         })
       }
@@ -152,7 +163,7 @@ export async function buildExcelReport(type: ReportType, data: any): Promise<Exc
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       for (const r of data.receipts as any[]) {
         sheet.addRow({
-          dt: new Date(r.receipt_datetime).toLocaleString("pt-BR"),
+          dt: formatDateTime(r.receipt_datetime),
           amount: money(r.amount_cents),
           status: STATUS_LABELS[r.status] ?? r.status,
           sale: r.sale_number ?? "-",
@@ -176,7 +187,7 @@ export async function buildExcelReport(type: ReportType, data: any): Promise<Exc
       for (const s of data.sales as any[]) {
         sheet.addRow({
           n: s.sale_number,
-          dt: new Date(s.sale_datetime).toLocaleString("pt-BR"),
+          dt: formatDateTime(s.sale_datetime),
           customer: s.customer_name ?? "-",
           total: money(s.total_cents),
           received: money(s.amount_received_cents),

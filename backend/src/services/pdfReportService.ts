@@ -5,6 +5,17 @@ function brl(cents: number) {
   return (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
 }
 
+// Mesmo fuso configurado na conexão do banco (ver backend/src/db/pool.ts) — sem
+// isso, o servidor formata a data/hora no seu próprio fuso (normalmente UTC),
+// mostrando um horário até 3h adiantado (ou o dia errado) no relatório.
+const TZ = "America/Bahia"
+function formatDateTime(value: string | Date) {
+  return new Date(value).toLocaleString("pt-BR", { timeZone: TZ })
+}
+function formatDate(value: string | Date) {
+  return new Date(value).toLocaleDateString("pt-BR", { timeZone: TZ })
+}
+
 const CATEGORY_LABELS: Record<string, string> = {
   materia_prima: "Matéria-prima",
   embalagens: "Embalagens",
@@ -56,7 +67,7 @@ export function buildPdfReport(type: ReportType, data: any): Promise<Buffer> {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (data.sales as any[]).map((s) => [
             String(s.sale_number),
-            new Date(s.sale_datetime).toLocaleString("pt-BR"),
+            formatDateTime(s.sale_datetime),
             s.customer_name ?? "-",
             s.payment_method,
             brl(s.total_cents),
@@ -83,7 +94,7 @@ export function buildPdfReport(type: ReportType, data: any): Promise<Buffer> {
             e.description,
             CATEGORY_LABELS[e.category] ?? e.category,
             brl(e.amount_cents),
-            new Date(e.expense_date).toLocaleDateString("pt-BR"),
+            formatDate(e.expense_date),
             e.payment_method,
           ])
         )
@@ -122,7 +133,7 @@ export function buildPdfReport(type: ReportType, data: any): Promise<Buffer> {
           [150, 100, 100, 100],
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (data.receipts as any[]).map((r) => [
-            new Date(r.receipt_datetime).toLocaleString("pt-BR"),
+            formatDateTime(r.receipt_datetime),
             brl(r.amount_cents),
             STATUS_LABELS[r.status] ?? r.status,
             r.sale_number ? `#${r.sale_number}` : "-",
@@ -140,7 +151,7 @@ export function buildPdfReport(type: ReportType, data: any): Promise<Buffer> {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (data.sales as any[]).map((s) => [
             String(s.sale_number),
-            new Date(s.sale_datetime).toLocaleString("pt-BR"),
+            formatDateTime(s.sale_datetime),
             s.customer_name ?? "-",
             brl(s.total_cents),
             brl(s.amount_received_cents),

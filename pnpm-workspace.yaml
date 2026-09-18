@@ -1,8 +1,9 @@
+packages:
+  - "frontend"
+  - "backend"
+
 pmOnFail: ignore
 
 minimumReleaseAgeExclude:
   - '@next/*'
   - next
-
-allowBuilds:
-  esbuild: set this to true or false

@@ -14,6 +14,9 @@ export function useApiQuery<T>(path: string | null) {
   useEffect(() => {
     if (!path) return
     let cancelled = false
+    // Limpa o dado anterior ao trocar de path (ex: selecionar outro produto),
+    // pra não exibir o resultado de uma consulta diferente enquanto a nova carrega.
+    setData(null)
     setIsLoading(true)
     setError(null)
 

@@ -1,15 +1,55 @@
-# v0 sandbox internal files
+# === Dependências ===
+node_modules/
+.pnpm-store/
+
+# === Next.js (frontend/) ===
+.next/
+out/
+next-env.d.ts
+
+# === Backend (build de produção do TypeScript) ===
+backend/dist/
+backend/build/
+
+# === TypeScript ===
+*.tsbuildinfo
+
+# === Variáveis de ambiente (nunca versionar segredos reais) ===
+.env
+.env.local
+.env.*.local
+!.env.example
+!.env.local.example
+
+# === Logs ===
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# === Build genérico ===
+build/
+dist/
+
+# === Cobertura de testes ===
+coverage/
+
+# === Vercel ===
+.vercel
+
+# === Sistema operacional ===
+.DS_Store
+Thumbs.db
+*.pem
+
+# === Editores/IDEs ===
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# === v0 sandbox (mantido do .gitignore original) ===
 __v0_runtime_loader.js
 __v0_devtools.tsx
 __v0_jsx-dev-runtime.ts
 .snowflake/
 .v0-trash/
-.vercel/
-
-# Environment variables
-.env*.local
-
-# Common ignores
-node_modules
-.next/
-.DS_Store
