@@ -41,7 +41,7 @@ export function clearSession() {
 
 type ApiFetchOptions = Omit<RequestInit, "body"> & { body?: unknown }
 
-// Sessão expira em 15 min (definido no backend). Quando um 401 chega, limpa a
+// A duração da sessão é definida no backend (JWT_EXPIRES_IN, padrão 12h). Quando um 401 chega, limpa a
 // sessão local e manda pro login — evita a tela ficar "travada" mostrando
 // dado velho depois do token expirar.
 export async function apiFetch<T = unknown>(path: string, options: ApiFetchOptions = {}): Promise<T> {
@@ -76,7 +76,12 @@ export async function apiFetch<T = unknown>(path: string, options: ApiFetchOptio
   const payload = isJson ? await response.json() : await response.blob()
 
   if (!response.ok) {
-    const message = isJson && payload?.error ? payload.error : "Erro inesperado ao falar com o servidor"
+    const message =
+      isJson && payload?.error
+        ? payload.error
+        : response.status === 429
+          ? "Muitas requisições. Aguarde alguns minutos e tente novamente."
+          : "Erro inesperado ao falar com o servidor"
     throw new ApiClientError(message, response.status)
   }
 

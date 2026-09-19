@@ -26,7 +26,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return
     }
     // Revalida o token salvo contra o backend antes de confiar nele —
-    // se expirou (sessão de 15 min) ou o usuário foi removido, limpa e
+    // se a sessão expirou ou o usuário foi removido, limpa e
     // manda pro login em vez de deixar a tela "logada" com dado inválido.
     apiFetch<{ user: AuthUser }>("/api/auth/me")
       .then(({ user }) => setUser(user))

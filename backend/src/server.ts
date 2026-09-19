@@ -25,15 +25,27 @@ app.set("trust proxy", 1)
 app.use(helmet())
 app.use(cors({ origin: env.FRONTEND_ORIGIN, credentials: true, methods: ["GET", "POST", "PATCH", "PUT", "DELETE"] }))
 app.use(express.json({ limit: "100kb" }))
-app.use(rateLimit({ windowMs: 15 * 60 * 1000, limit: 100, standardHeaders: "draft-8", legacyHeaders: false }))
+// Limite geral por IP, compartilhado por todas as rotas. Precisa ser folgado:
+// o painel faz várias chamadas por tela (listas, dashboard, recarregamentos
+// depois de salvar), e 100 por 15 min estourava em uso normal, devolvendo 429.
+app.use(
+  rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 1000,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+    message: { error: "Muitas requisições. Aguarde alguns minutos e tente novamente." },
+  })
+)
 
-// O limite geral acima (100/15min) é compartilhado com TODAS as rotas — não
-// protege de verdade contra tentativa de adivinhar senha, já que dashboard e
-// listagens consomem essa mesma cota. O login recebe um limite próprio, mais
-// apertado, por IP.
+// O limite geral acima não protege de verdade contra tentativa de adivinhar
+// senha, já que dashboard e listagens consomem essa mesma cota. O login recebe
+// um limite próprio, mais apertado, por IP — e só conta as tentativas que
+// FALHAM (skipSuccessfulRequests), pra entrar corretamente não gastar a cota.
 const loginRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 10,
+  skipSuccessfulRequests: true,
   standardHeaders: "draft-8",
   legacyHeaders: false,
   message: { error: "Muitas tentativas de login. Tente novamente em alguns minutos." },
