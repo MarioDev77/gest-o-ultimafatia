@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { Plus, Trash2 } from "lucide-react"
+import { Check, Minus, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -19,9 +19,11 @@ import { apiFetch, ApiClientError } from "@/lib/api-client"
 import { useToast } from "@/components/ui/toast"
 import { useApiQuery } from "@/lib/hooks/use-api-query"
 import { formatCentsBRL } from "@/lib/format"
+import { cn } from "@/lib/utils"
 import type { PaymentMethod, Product, SaleWeek } from "@/lib/types"
 
-type ItemRow = { productId: string; quantity: string; unitPrice: string }
+// Produtos marcados na venda: chave = id do produto. Produto fora do objeto = não selecionado.
+type Selection = Record<string, { quantity: string; unitPrice: string }>
 
 function centsFromInput(value: string): number {
   const normalized = value.trim().replace(/\./g, "").replace(",", ".")
@@ -29,8 +31,8 @@ function centsFromInput(value: string): number {
   return Number.isNaN(parsed) ? 0 : Math.round(parsed * 100)
 }
 
-function emptyItem(): ItemRow {
-  return { productId: "", quantity: "1", unitPrice: "" }
+function priceToInput(cents: number | null): string {
+  return cents != null ? (cents / 100).toFixed(2).replace(".", ",") : ""
 }
 
 export function SaleFormDialog({
@@ -54,7 +56,7 @@ export function SaleFormDialog({
   const [weekId, setWeekId] = useState("")
   const toast = useToast()
 
-  const [items, setItems] = useState<ItemRow[]>([emptyItem()])
+  const [selection, setSelection] = useState<Selection>({})
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("pix")
   const [amountReceived, setAmountReceived] = useState("")
   const [discount, setDiscount] = useState("")
@@ -65,7 +67,7 @@ export function SaleFormDialog({
 
   useEffect(() => {
     if (open) {
-      setItems([emptyItem()])
+      setSelection({})
       setPaymentMethod("pix")
       setAmountReceived("")
       setDiscount("")
@@ -76,21 +78,33 @@ export function SaleFormDialog({
     }
   }, [open])
 
-  function updateItem(index: number, patch: Partial<ItemRow>) {
-    setItems((rows) => rows.map((row, i) => (i === index ? { ...row, ...patch } : row)))
-  }
-
-  function selectProduct(index: number, productId: string) {
-    const product = products.find((p) => p.id === productId)
-    updateItem(index, {
-      productId,
-      unitPrice: product?.sale_price_cents != null ? (product.sale_price_cents / 100).toFixed(2).replace(".", ",") : "",
+  function toggleProduct(product: Product) {
+    setSelection((current) => {
+      if (current[product.id]) {
+        const { [product.id]: _removed, ...rest } = current
+        return rest
+      }
+      // Preço de catálogo entra preenchido; sem preço cadastrado fica vazio pra digitar.
+      return { ...current, [product.id]: { quantity: "1", unitPrice: priceToInput(product.sale_price_cents) } }
     })
   }
 
+  function updateSelection(productId: string, patch: Partial<Selection[string]>) {
+    setSelection((current) => (current[productId] ? { ...current, [productId]: { ...current[productId], ...patch } } : current))
+  }
+
+  function changeQuantity(productId: string, delta: number) {
+    const current = Number.parseInt(selection[productId]?.quantity ?? "1", 10) || 1
+    updateSelection(productId, { quantity: String(Math.max(1, current + delta)) })
+  }
+
   const subtotalCents = useMemo(
-    () => items.reduce((sum, row) => sum + centsFromInput(row.unitPrice) * (Number.parseInt(row.quantity, 10) || 0), 0),
-    [items]
+    () =>
+      Object.values(selection).reduce(
+        (sum, row) => sum + centsFromInput(row.unitPrice) * (Number.parseInt(row.quantity, 10) || 0),
+        0
+      ),
+    [selection]
   )
   const discountCents = centsFromInput(discount)
   const totalCents = Math.max(0, subtotalCents - discountCents)
@@ -101,9 +115,11 @@ export function SaleFormDialog({
     event.preventDefault()
     setError(null)
 
-    const validItems = items.filter((row) => row.productId && Number.parseInt(row.quantity, 10) > 0)
+    const validItems = Object.entries(selection)
+      .map(([productId, row]) => ({ productId, ...row }))
+      .filter((row) => Number.parseInt(row.quantity, 10) > 0)
     if (validItems.length === 0) {
-      setError("Adicione pelo menos um item com produto e quantidade")
+      setError("Selecione pelo menos um produto")
       return
     }
     if (paymentMethod === "dinheiro" && amountReceivedCents < totalCents) {
@@ -156,51 +172,93 @@ export function SaleFormDialog({
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
-            <Label>Itens</Label>
-            {items.map((row, index) => (
-              <div key={index} className="flex items-end gap-2">
-                <div className="flex-1">
-                  <Select value={row.productId} onChange={(e) => selectProduct(index, e.target.value)} required>
-                    <option value="">Selecione o produto</option>
-                    {products.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-                <Input
-                  type="number"
-                  min={1}
-                  className="w-16"
-                  value={row.quantity}
-                  onChange={(e) => updateItem(index, { quantity: e.target.value })}
-                  aria-label="Quantidade"
-                />
-                <Input
-                  className="w-24"
-                  inputMode="decimal"
-                  placeholder="Preço"
-                  value={row.unitPrice}
-                  onChange={(e) => updateItem(index, { unitPrice: e.target.value })}
-                  aria-label="Preço unitário"
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  aria-label="Remover item"
-                  disabled={items.length === 1}
-                  onClick={() => setItems((rows) => rows.filter((_, i) => i !== index))}
-                >
-                  <Trash2 className="size-4" />
-                </Button>
-              </div>
-            ))}
-            <Button type="button" variant="outline" size="sm" className="self-start" onClick={() => setItems((rows) => [...rows, emptyItem()])}>
-              <Plus className="size-3.5" />
-              Adicionar item
-            </Button>
+            <Label>Produtos (toque em um ou mais)</Label>
+            {!productsData ? (
+              <p className="text-sm text-muted-foreground">Carregando produtos...</p>
+            ) : products.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Nenhum produto ativo cadastrado.</p>
+            ) : (
+              products.map((product) => {
+                const row = selection[product.id]
+                const selected = !!row
+                return (
+                  <div
+                    key={product.id}
+                    className={cn(
+                      "rounded-lg border p-3 transition-colors",
+                      selected ? "border-primary/60 bg-primary/5" : "border-border"
+                    )}
+                  >
+                    <button
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => toggleProduct(product)}
+                      className="flex w-full items-center gap-3 text-left"
+                    >
+                      <span
+                        className={cn(
+                          "flex size-5 shrink-0 items-center justify-center rounded border",
+                          selected ? "border-primary bg-primary text-primary-foreground" : "border-input"
+                        )}
+                      >
+                        {selected && <Check className="size-3.5" />}
+                      </span>
+                      <span className="flex flex-col">
+                        <span className="text-sm font-medium">{product.name}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {product.sale_price_cents != null ? formatCentsBRL(product.sale_price_cents) : "Sem preço cadastrado"}
+                          {" · "}Estoque: {product.stock_quantity}
+                        </span>
+                      </span>
+                    </button>
+
+                    {selected && (
+                      <div className="mt-3 flex flex-wrap items-center gap-3 pl-8">
+                        <div className="flex items-center gap-1">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            aria-label={`Diminuir quantidade de ${product.name}`}
+                            onClick={() => changeQuantity(product.id, -1)}
+                          >
+                            <Minus className="size-3.5" />
+                          </Button>
+                          <Input
+                            type="number"
+                            min={1}
+                            className="w-16 text-center"
+                            value={row.quantity}
+                            onChange={(e) => updateSelection(product.id, { quantity: e.target.value })}
+                            aria-label={`Quantidade de ${product.name}`}
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            aria-label={`Aumentar quantidade de ${product.name}`}
+                            onClick={() => changeQuantity(product.id, 1)}
+                          >
+                            <Plus className="size-3.5" />
+                          </Button>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs text-muted-foreground">Preço (R$)</span>
+                          <Input
+                            className="w-24"
+                            inputMode="decimal"
+                            placeholder="0,00"
+                            value={row.unitPrice}
+                            onChange={(e) => updateSelection(product.id, { unitPrice: e.target.value })}
+                            aria-label={`Preço unitário de ${product.name}`}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
