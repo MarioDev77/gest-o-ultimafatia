@@ -8,6 +8,7 @@ import {
   ChefHat,
   FileBarChart,
   Wallet,
+  CalendarDays,
 } from "lucide-react"
 
 export type NavItem = {
@@ -23,6 +24,7 @@ export type NavItem = {
 export const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, available: true },
   { label: "Vendas", href: "/vendas", icon: ShoppingCart, available: true },
+  { label: "Semanas", href: "/semanas", icon: CalendarDays, available: true },
   { label: "Produtos", href: "/produtos", icon: Package, available: true },
   { label: "Comprovantes PIX", href: "/comprovantes-pix", icon: QrCode, available: true },
   { label: "Despesas", href: "/despesas", icon: Receipt, available: true },

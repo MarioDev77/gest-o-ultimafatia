@@ -17,6 +17,7 @@ export type CreateSaleInput = {
   amountReceivedCents: number | null
   discountCents: number
   notes: string | null
+  weekId: string | null
   createdBy: string
 }
 
@@ -29,6 +30,11 @@ export async function createSale(pool: Pool, input: CreateSaleInput) {
   const client = await pool.connect()
   try {
     await client.query("BEGIN")
+
+    if (input.weekId) {
+      const week = await client.query("SELECT id FROM sale_weeks WHERE id = $1 AND deleted_at IS NULL", [input.weekId])
+      if (!week.rows[0]) throw new SalesServiceError("Semana não encontrada", 404)
+    }
 
     let subtotalCents = 0
     let totalCostCents = 0
@@ -108,8 +114,8 @@ export async function createSale(pool: Pool, input: CreateSaleInput) {
     }
 
     const saleResult = await client.query(
-      `INSERT INTO sales (customer_name, payment_method, amount_received_cents, change_cents, discount_cents, subtotal_cents, total_cents, total_cost_cents, notes, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      `INSERT INTO sales (customer_name, payment_method, amount_received_cents, change_cents, discount_cents, subtotal_cents, total_cents, total_cost_cents, notes, created_by, week_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING id, sale_number, sale_datetime`,
       [
         input.customerName,
@@ -122,6 +128,7 @@ export async function createSale(pool: Pool, input: CreateSaleInput) {
         totalCostCents,
         input.notes,
         input.createdBy,
+        input.weekId,
       ]
     )
     const sale = saleResult.rows[0]
@@ -148,6 +155,7 @@ export async function createSale(pool: Pool, input: CreateSaleInput) {
       totalCostCents,
       amountReceivedCents,
       changeCents,
+      weekId: input.weekId,
       status: "concluida" as const,
       items: resolvedItems,
       costWarning: resolvedItems.some((i) => i.costMissing),

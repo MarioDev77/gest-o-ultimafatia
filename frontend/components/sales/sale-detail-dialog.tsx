@@ -73,6 +73,13 @@ export function SaleDetailDialog({
                 </span>
               </div>
 
+              {sale.week_name && (
+                <p className="text-sm">
+                  <span className="text-muted-foreground">Semana: </span>
+                  {sale.week_name}
+                </p>
+              )}
+
               {sale.customer_name && (
                 <p className="text-sm">
                   <span className="text-muted-foreground">Cliente: </span>

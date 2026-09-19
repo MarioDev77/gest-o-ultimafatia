@@ -15,6 +15,16 @@ export type Sale = {
   total_cost_cents: number
   status: SaleStatus
   notes: string | null
+  week_id: string | null
+  week_name: string | null
+}
+
+export type SaleWeek = {
+  id: string
+  name: string
+  created_at: string
+  sales_count: number
+  revenue_cents: number
 }
 
 export type SaleItemRow = {

@@ -49,7 +49,7 @@ Os arquivos enviados pelo painel ficam salvos em disco, na pasta apontada por `U
 
 ## Migrations
 
-Rode os arquivos de `backend/migrations/` em ordem contra o Postgres (`001_initial.sql`, `002_financeiro.sql`, `003_indexes.sql`), com `psql` ou a ferramenta de migração de sua preferência.
+Rode os arquivos de `backend/migrations/` em ordem contra o Postgres (`001_initial.sql`, `002_financeiro.sql`, `003_indexes.sql`, `004_semanas.sql`), com `psql` ou a ferramenta de migração de sua preferência.
 
 ## Deploy (Railway / Railpack)
 

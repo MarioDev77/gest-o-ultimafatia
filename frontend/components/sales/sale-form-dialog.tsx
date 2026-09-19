@@ -19,7 +19,7 @@ import { apiFetch, ApiClientError } from "@/lib/api-client"
 import { useToast } from "@/components/ui/toast"
 import { useApiQuery } from "@/lib/hooks/use-api-query"
 import { formatCentsBRL } from "@/lib/format"
-import type { PaymentMethod, Product } from "@/lib/types"
+import type { PaymentMethod, Product, SaleWeek } from "@/lib/types"
 
 type ItemRow = { productId: string; quantity: string; unitPrice: string }
 
@@ -37,13 +37,21 @@ export function SaleFormDialog({
   open,
   onOpenChange,
   onSaved,
+  fixedWeek,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   onSaved: () => void
+  // Quando informado (tela de uma semana), a venda é registrada nessa semana e
+  // o campo de escolha de semana não aparece. Sem isso (aba Vendas), o campo
+  // "Semana" aparece como opcional.
+  fixedWeek?: { id: string; name: string }
 }) {
   const { data: productsData } = useApiQuery<{ items: Product[] }>(open ? "/api/products?status=ativo" : null)
   const products = productsData?.items ?? []
+  const { data: weeksData } = useApiQuery<{ items: SaleWeek[] }>(open && !fixedWeek ? "/api/weeks" : null)
+  const weeks = weeksData?.items ?? []
+  const [weekId, setWeekId] = useState("")
   const toast = useToast()
 
   const [items, setItems] = useState<ItemRow[]>([emptyItem()])
@@ -63,6 +71,7 @@ export function SaleFormDialog({
       setDiscount("")
       setCustomerName("")
       setNotes("")
+      setWeekId("")
       setError(null)
     }
   }, [open])
@@ -120,6 +129,7 @@ export function SaleFormDialog({
           discountCents: discountCents || undefined,
           customerName: customerName.trim() || undefined,
           notes: notes.trim() || undefined,
+          weekId: fixedWeek?.id ?? (weekId || undefined),
         },
       })
       toast.add({ title: "Venda registrada", type: "success" })
@@ -139,7 +149,9 @@ export function SaleFormDialog({
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Nova venda</DialogTitle>
-          <DialogDescription>Selecione os produtos, a forma de pagamento e confirme.</DialogDescription>
+          <DialogDescription>
+            {fixedWeek ? `Venda da semana: ${fixedWeek.name}.` : "Selecione os produtos, a forma de pagamento e confirme."}
+          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
@@ -217,6 +229,20 @@ export function SaleFormDialog({
               </div>
             )}
           </div>
+
+          {!fixedWeek && (
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="saleWeek">Semana (opcional)</Label>
+              <Select id="saleWeek" value={weekId} onChange={(e) => setWeekId(e.target.value)}>
+                <option value="">Sem semana</option>
+                {weeks.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {w.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          )}
 
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="customerName">Cliente (opcional)</Label>

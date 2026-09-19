@@ -8,6 +8,7 @@ import contentRoutes from "./routes/content"
 import uploadRoutes from "./routes/uploads"
 import productRoutes from "./routes/products"
 import salesRoutes from "./routes/sales"
+import weekRoutes from "./routes/weeks"
 import pixReceiptRoutes from "./routes/pixReceipts"
 import expenseRoutes from "./routes/expenses"
 import manufacturingRoutes from "./routes/manufacturing"
@@ -45,6 +46,7 @@ app.use("/api/contents", contentRoutes)
 app.use("/api/uploads", uploadRoutes)
 app.use("/api/products", productRoutes)
 app.use("/api/sales", salesRoutes)
+app.use("/api/weeks", weekRoutes)
 app.use("/api/pix-receipts", pixReceiptRoutes)
 app.use("/api/expenses", expenseRoutes)
 app.use("/api/manufacturing", manufacturingRoutes)

@@ -21,6 +21,7 @@ const createSaleSchema = z.object({
   amountReceivedCents: moneyCents.optional(),
   discountCents: moneyCents.default(0),
   notes: z.string().trim().min(1).max(500).optional(),
+  weekId: z.string().uuid().optional(),
 })
 
 // customerName/notes/amountReceivedCents são nullable pra permitir limpar o
@@ -32,6 +33,7 @@ const updateSaleMetaSchema = z
     discountCents: moneyCents,
     paymentMethod: z.enum(["dinheiro", "pix", "cartao"]),
     amountReceivedCents: moneyCents.nullable(),
+    weekId: z.string().uuid().nullable(),
   })
   .partial()
   .refine((v) => Object.keys(v).length > 0, { message: "Nenhum campo para atualizar" })
@@ -42,6 +44,8 @@ const listQuerySchema = z.object({
   status: z.enum(["concluida", "cancelada"]).optional(),
   paymentMethod: z.enum(["dinheiro", "pix", "cartao"]).optional(),
   search: z.string().trim().max(160).optional(),
+  // "none" = só vendas sem semana
+  weekId: z.union([z.literal("none"), z.string().uuid()]).optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
   offset: z.coerce.number().int().min(0).default(0),
 })
@@ -73,6 +77,13 @@ router.get("/", requireAuth, requireAdmin, async (req, res, next) => {
       conditions.push(`s.customer_name ILIKE $${params.length}`)
     }
 
+    if (q.weekId === "none") {
+      conditions.push("s.week_id IS NULL")
+    } else if (q.weekId) {
+      params.push(q.weekId)
+      conditions.push(`s.week_id = $${params.length}`)
+    }
+
     params.push(q.limit)
     const limitIdx = params.length
     params.push(q.offset)
@@ -81,8 +92,9 @@ router.get("/", requireAuth, requireAdmin, async (req, res, next) => {
     const result = await pool.query(
       `SELECT s.id, s.sale_number, s.sale_datetime, s.customer_name, s.payment_method,
               s.amount_received_cents, s.change_cents, s.discount_cents, s.subtotal_cents,
-              s.total_cents, s.total_cost_cents, s.status, s.notes
+              s.total_cents, s.total_cost_cents, s.status, s.notes, s.week_id, w.name AS week_name
        FROM sales s
+       LEFT JOIN sale_weeks w ON w.id = s.week_id
        WHERE ${conditions.join(" AND ")}
        ORDER BY s.sale_datetime DESC
        LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
@@ -98,10 +110,12 @@ router.get("/:id", requireAuth, requireAdmin, async (req, res, next) => {
   try {
     const id = z.string().uuid().parse(req.params.id)
     const saleResult = await pool.query(
-      `SELECT id, sale_number, sale_datetime, customer_name, payment_method, amount_received_cents,
-              change_cents, discount_cents, subtotal_cents, total_cents, total_cost_cents, status, notes,
-              created_at, updated_at
-       FROM sales WHERE id = $1 AND deleted_at IS NULL`,
+      `SELECT s.id, s.sale_number, s.sale_datetime, s.customer_name, s.payment_method, s.amount_received_cents,
+              s.change_cents, s.discount_cents, s.subtotal_cents, s.total_cents, s.total_cost_cents, s.status, s.notes,
+              s.week_id, w.name AS week_name, s.created_at, s.updated_at
+       FROM sales s
+       LEFT JOIN sale_weeks w ON w.id = s.week_id
+       WHERE s.id = $1 AND s.deleted_at IS NULL`,
       [id]
     )
     const sale = saleResult.rows[0]
@@ -128,6 +142,7 @@ router.post("/", requireAuth, requireAdmin, async (req, res, next) => {
       amountReceivedCents: input.amountReceivedCents ?? null,
       discountCents: input.discountCents,
       notes: input.notes ?? null,
+      weekId: input.weekId ?? null,
       createdBy: req.user!.id,
     })
     res.status(201).json(sale)
@@ -196,6 +211,14 @@ router.patch("/:id", requireAuth, requireAdmin, async (req, res, next) => {
     if ("notes" in input) {
       params.push(input.notes)
       setClauses.push(`notes = $${params.length}`)
+    }
+    if ("weekId" in input) {
+      if (input.weekId) {
+        const week = await pool.query("SELECT id FROM sale_weeks WHERE id = $1 AND deleted_at IS NULL", [input.weekId])
+        if (!week.rows[0]) return res.status(404).json({ error: "Semana não encontrada" })
+      }
+      params.push(input.weekId)
+      setClauses.push(`week_id = $${params.length}`)
     }
 
     params.push(id)

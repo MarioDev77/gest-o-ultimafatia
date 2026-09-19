@@ -16,8 +16,9 @@ import { Select } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { apiFetch, ApiClientError } from "@/lib/api-client"
 import { useToast } from "@/components/ui/toast"
+import { useApiQuery } from "@/lib/hooks/use-api-query"
 import { formatCentsBRL } from "@/lib/format"
-import type { PaymentMethod, SaleDetail } from "@/lib/types"
+import type { PaymentMethod, SaleDetail, SaleWeek } from "@/lib/types"
 
 function centsFromInput(value: string): number {
   const normalized = value.trim().replace(/\./g, "").replace(",", ".")
@@ -43,6 +44,9 @@ export function SaleEditDialog({
   const [discount, setDiscount] = useState("0,00")
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("pix")
   const [amountReceived, setAmountReceived] = useState("")
+  const [weekId, setWeekId] = useState("")
+  const { data: weeksData } = useApiQuery<{ items: SaleWeek[] }>(sale ? "/api/weeks" : null)
+  const weeks = weeksData?.items ?? []
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const toast = useToast()
@@ -54,6 +58,7 @@ export function SaleEditDialog({
       setDiscount(centsToInput(sale.discount_cents))
       setPaymentMethod(sale.payment_method)
       setAmountReceived(sale.amount_received_cents !== null ? centsToInput(sale.amount_received_cents) : "")
+      setWeekId(sale.week_id ?? "")
       setError(null)
     }
   }, [sale])
@@ -87,6 +92,7 @@ export function SaleEditDialog({
           discountCents,
           paymentMethod,
           amountReceivedCents: paymentMethod === "dinheiro" ? amountReceivedCents : null,
+          weekId: weekId || null,
         },
       })
       toast.add({ title: "Venda atualizada", type: "success" })
@@ -115,6 +121,18 @@ export function SaleEditDialog({
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="editCustomerName">Cliente</Label>
             <Input id="editCustomerName" value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="editWeek">Semana</Label>
+            <Select id="editWeek" value={weekId} onChange={(e) => setWeekId(e.target.value)}>
+              <option value="">Sem semana</option>
+              {weeks.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.name}
+                </option>
+              ))}
+            </Select>
           </div>
 
           <div className="grid grid-cols-2 gap-3">

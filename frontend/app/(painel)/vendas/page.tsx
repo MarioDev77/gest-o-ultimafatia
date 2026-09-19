@@ -15,13 +15,14 @@ import { useApiQuery } from "@/lib/hooks/use-api-query"
 import { resolvePeriod } from "@/lib/period"
 import { formatCentsBRL, formatDateTimeBR } from "@/lib/format"
 import { PAYMENT_METHOD_LABELS } from "@/lib/types"
-import type { Sale, SaleDetail, SaleStatus, PaymentMethod } from "@/lib/types"
+import type { Sale, SaleDetail, SaleStatus, SaleWeek, PaymentMethod } from "@/lib/types"
 
 export default function VendasPage() {
   const [range] = useState(() => resolvePeriod("mes-atual"))
   const [status, setStatus] = useState<SaleStatus | "">("")
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">("")
   const [search, setSearch] = useState("")
+  const [weekId, setWeekId] = useState("")
 
   const [formOpen, setFormOpen] = useState(false)
   const [detailId, setDetailId] = useState<string | null>(null)
@@ -32,11 +33,14 @@ export default function VendasPage() {
     if (status) params.set("status", status)
     if (paymentMethod) params.set("paymentMethod", paymentMethod)
     if (search.trim()) params.set("search", search.trim())
+    if (weekId) params.set("weekId", weekId)
     return params.toString()
-  }, [range, status, paymentMethod, search])
+  }, [range, status, paymentMethod, search, weekId])
 
   const { data, isLoading, refetch } = useApiQuery<{ items: Sale[] }>(`/api/sales?${query}`)
   const sales = data?.items ?? []
+  const { data: weeksData } = useApiQuery<{ items: SaleWeek[] }>("/api/weeks")
+  const weeks = weeksData?.items ?? []
 
   function refetchAll() {
     refetch()
@@ -73,6 +77,15 @@ export default function VendasPage() {
           <option value="dinheiro">Dinheiro</option>
           <option value="cartao">Cartão</option>
         </Select>
+        <Select value={weekId} onChange={(e) => setWeekId(e.target.value)} className="w-44">
+          <option value="">Todas as semanas</option>
+          <option value="none">Sem semana</option>
+          {weeks.map((w) => (
+            <option key={w.id} value={w.id}>
+              {w.name}
+            </option>
+          ))}
+        </Select>
       </div>
 
       {isLoading ? (
@@ -96,7 +109,10 @@ export default function VendasPage() {
                     <p className="text-sm font-medium">
                       #{sale.sale_number} · {sale.customer_name ?? "Cliente não informado"}
                     </p>
-                    <p className="text-xs text-muted-foreground">{formatDateTimeBR(sale.sale_datetime)}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatDateTimeBR(sale.sale_datetime)}
+                      {sale.week_name ? ` · ${sale.week_name}` : ""}
+                    </p>
                   </div>
                   <div className="text-right">
                     <p className="text-sm font-semibold">{formatCentsBRL(sale.total_cents)}</p>
@@ -111,12 +127,13 @@ export default function VendasPage() {
 
           {/* Desktop: tabela */}
           <Card className="hidden overflow-x-auto md:block">
-            <table className="w-full min-w-[760px] text-left text-sm">
+            <table className="w-full min-w-[840px] text-left text-sm">
               <thead className="border-b border-border text-xs text-muted-foreground">
                 <tr>
                   <th className="px-4 py-3 font-medium">Nº</th>
                   <th className="px-4 py-3 font-medium">Data/Hora</th>
                   <th className="px-4 py-3 font-medium">Cliente</th>
+                  <th className="px-4 py-3 font-medium">Semana</th>
                   <th className="px-4 py-3 font-medium">Pagamento</th>
                   <th className="px-4 py-3 font-medium">Total</th>
                   <th className="px-4 py-3 font-medium">Status</th>
@@ -132,6 +149,7 @@ export default function VendasPage() {
                     <td className="px-4 py-3 font-medium text-foreground">#{sale.sale_number}</td>
                     <td className="px-4 py-3">{formatDateTimeBR(sale.sale_datetime)}</td>
                     <td className="px-4 py-3">{sale.customer_name ?? "—"}</td>
+                    <td className="px-4 py-3">{sale.week_name ?? "—"}</td>
                     <td className="px-4 py-3">{PAYMENT_METHOD_LABELS[sale.payment_method] ?? sale.payment_method}</td>
                     <td className="px-4 py-3 font-medium">{formatCentsBRL(sale.total_cents)}</td>
                     <td className="px-4 py-3">
