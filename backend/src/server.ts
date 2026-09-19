@@ -17,6 +17,10 @@ import reportRoutes from "./routes/reports"
 
 const app = express()
 app.disable("x-powered-by")
+// O Railway coloca um proxy na frente do app (1 salto). Sem isso, o rate limit
+// enxerga o IP do proxy pra todo mundo, e o limite do login vira compartilhado
+// entre todos os usuários.
+app.set("trust proxy", 1)
 app.use(helmet())
 app.use(cors({ origin: env.FRONTEND_ORIGIN, credentials: true, methods: ["GET", "POST", "PATCH", "PUT", "DELETE"] }))
 app.use(express.json({ limit: "100kb" }))
