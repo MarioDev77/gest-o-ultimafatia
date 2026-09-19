@@ -86,7 +86,7 @@ export function ExpenseFormDialog({
               paymentMethod: expense.payment_method,
               note: expense.note ?? "",
               receiptKey: expense.receipt_key,
-              receiptPreview: null,
+              receiptPreview: expense.receipt_url,
             }
           : emptyForm()
       )

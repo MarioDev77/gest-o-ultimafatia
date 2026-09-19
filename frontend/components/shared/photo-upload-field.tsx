@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { apiFetch } from "@/lib/api-client"
 import { cn } from "@/lib/utils"
 
-type PresignResponse = { url: string; key: string }
+type UploadResponse = { key: string }
 
 export function PhotoUploadField({
   previewUrl,
@@ -40,19 +40,16 @@ export function PhotoUploadField({
     const localPreview = URL.createObjectURL(file)
 
     try {
-      const presign = await apiFetch<PresignResponse>("/api/uploads/presign", {
+      const formData = new FormData()
+      formData.append("file", file)
+      // apiFetch detecta FormData e não força Content-Type: application/json,
+      // deixando o navegador definir o boundary do multipart sozinho.
+      const uploaded = await apiFetch<UploadResponse>("/api/uploads", {
         method: "POST",
-        body: { filename: file.name, contentType: file.type, size: file.size },
+        body: formData,
       })
 
-      const uploadResponse = await fetch(presign.url, {
-        method: "PUT",
-        headers: { "Content-Type": file.type },
-        body: file,
-      })
-      if (!uploadResponse.ok) throw new Error("Falha ao enviar a imagem")
-
-      onUploaded(presign.key, localPreview)
+      onUploaded(uploaded.key, localPreview)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível enviar a foto")
     } finally {

@@ -1,33 +1,13 @@
 import { Router } from "express"
 import { z } from "zod"
-import { DeleteObjectCommand, GetObjectCommand, S3Client } from "@aws-sdk/client-s3"
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 import { pool } from "../db/pool"
-import { env } from "../config/env"
 import { requireAdmin, requireAuth } from "../middleware/auth"
 import { ApiError } from "../lib/errors"
+import { assertOwnedKey, buildViewUrl, deleteUpload } from "../lib/localStorage"
 
 const router = Router()
 
-const s3 = new S3Client({
-  region: env.S3_REGION,
-  endpoint: env.S3_ENDPOINT,
-  forcePathStyle: Boolean(env.S3_ENDPOINT),
-  credentials: { accessKeyId: env.S3_ACCESS_KEY_ID, secretAccessKey: env.S3_SECRET_ACCESS_KEY },
-})
-
 const moneyCents = z.number().int().min(0).max(100_000_00)
-
-// A imagem tem que ter sido enviada por ESTE admin via /api/uploads/presign
-// (chave sempre começa com private/<userId>/...). Sem essa checagem, um token
-// válido poderia associar um comprovante a uma chave S3 arbitrária de outro
-// usuário — proteção contra IDOR no upload.
-function assertOwnedKey(userId: string, imageKey: string) {
-  const prefix = `private/${userId}/`
-  if (!imageKey.startsWith(prefix)) {
-    throw new ApiError("Chave de imagem inválida para este usuário", 403)
-  }
-}
 
 const createSchema = z.object({
   imageKey: z.string().trim().min(1).max(400),
@@ -59,9 +39,7 @@ const listQuerySchema = z.object({
 })
 
 async function attachViewUrl(row: Record<string, unknown>) {
-  const command = new GetObjectCommand({ Bucket: env.S3_BUCKET, Key: row.image_key as string })
-  const viewUrl = await getSignedUrl(s3, command, { expiresIn: 300 })
-  return { ...row, viewUrl }
+  return { ...row, viewUrl: buildViewUrl(row.image_key as string) }
 }
 
 async function attachViewUrls(rows: Record<string, unknown>[]) {
@@ -206,10 +184,10 @@ router.patch("/:id", requireAuth, requireAdmin, async (req, res, next) => {
     )
     const updated = result.rows[0]
 
-    // Imagem substituída: apaga o objeto antigo do S3 (best-effort, não trava a resposta).
+    // Imagem substituída: apaga o arquivo antigo do disco (best-effort, não trava a resposta).
     if (input.imageKey && input.imageKey !== existing.image_key) {
-      s3.send(new DeleteObjectCommand({ Bucket: env.S3_BUCKET, Key: existing.image_key })).catch((err) =>
-        console.error("[pix-receipts] falha ao apagar imagem antiga do S3", err)
+      deleteUpload(existing.image_key).catch((err) =>
+        console.error("[pix-receipts] falha ao apagar imagem antiga do disco", err)
       )
     }
 
@@ -229,8 +207,8 @@ router.delete("/:id", requireAuth, requireAdmin, async (req, res, next) => {
     )
     const deleted = result.rows[0]
     if (!deleted) return res.status(404).json({ error: "Comprovante não encontrado" })
-    s3.send(new DeleteObjectCommand({ Bucket: env.S3_BUCKET, Key: deleted.image_key })).catch((err) =>
-      console.error("[pix-receipts] falha ao apagar imagem do S3", err)
+    deleteUpload(deleted.image_key).catch((err) =>
+      console.error("[pix-receipts] falha ao apagar imagem do disco", err)
     )
     res.status(204).send()
   } catch (error) {

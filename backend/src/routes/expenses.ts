@@ -3,17 +3,19 @@ import { z } from "zod"
 import { pool } from "../db/pool"
 import { requireAdmin, requireAuth } from "../middleware/auth"
 import { ApiError } from "../lib/errors"
+import { assertOwnedKey, buildViewUrl } from "../lib/localStorage"
 
 const router = Router()
 
 const CATEGORIES = ["materia_prima", "embalagens", "transporte", "marketing", "equipamentos", "taxas", "outros"] as const
 const moneyCents = z.number().int().min(1).max(100_000_00)
 
-function assertOwnedKey(userId: string, key: string) {
-  const prefix = `private/${userId}/`
-  if (!key.startsWith(prefix)) {
-    throw new ApiError("Chave de comprovante inválida para este usuário", 403)
-  }
+// expenses.receipt_key aponta pra pasta privada de uploads — sem isso o
+// comprovante fica salvo mas nunca reaparece ao reabrir a despesa (era o que
+// acontecia antes: essa rota nunca gerava a URL de visualização).
+function attachReceiptUrl<T extends { receipt_key: string | null }>(row: T): T & { receipt_url: string | null } {
+  if (!row.receipt_key) return { ...row, receipt_url: null }
+  return { ...row, receipt_url: buildViewUrl(row.receipt_key) }
 }
 
 const createSchema = z.object({
@@ -83,7 +85,7 @@ router.get("/", requireAuth, requireAdmin, async (req, res, next) => {
        LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
       params
     )
-    res.json({ items: result.rows })
+    res.json({ items: result.rows.map(attachReceiptUrl) })
   } catch (error) {
     next(error)
   }
@@ -95,7 +97,7 @@ router.get("/:id", requireAuth, requireAdmin, async (req, res, next) => {
     const result = await pool.query("SELECT * FROM expenses WHERE id = $1 AND deleted_at IS NULL", [id])
     const expense = result.rows[0]
     if (!expense) return res.status(404).json({ error: "Despesa não encontrada" })
-    res.json(expense)
+    res.json(attachReceiptUrl(expense))
   } catch (error) {
     next(error)
   }
@@ -112,7 +114,7 @@ router.post("/", requireAuth, requireAdmin, async (req, res, next) => {
        RETURNING id, description, category, amount_cents, expense_date, payment_method, note, receipt_key, created_at, updated_at`,
       [input.description, input.category, input.amountCents, input.expenseDate, input.paymentMethod, input.note ?? null, input.receiptKey ?? null, req.user?.id]
     )
-    res.status(201).json(result.rows[0])
+    res.status(201).json(attachReceiptUrl(result.rows[0]))
   } catch (error) {
     if (error instanceof ApiError) return res.status(error.status).json({ error: error.message })
     next(error)
@@ -152,7 +154,7 @@ router.patch("/:id", requireAuth, requireAdmin, async (req, res, next) => {
     )
     const expense = result.rows[0]
     if (!expense) return res.status(404).json({ error: "Despesa não encontrada" })
-    res.json(expense)
+    res.json(attachReceiptUrl(expense))
   } catch (error) {
     if (error instanceof ApiError) return res.status(error.status).json({ error: error.message })
     next(error)

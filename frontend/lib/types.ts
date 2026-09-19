@@ -84,6 +84,7 @@ export type Expense = {
   payment_method: PaymentMethod
   note: string | null
   receipt_key: string | null
+  receipt_url: string | null
   created_at: string
   updated_at: string
 }

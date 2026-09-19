@@ -11,6 +11,11 @@ next-env.d.ts
 backend/dist/
 backend/build/
 
+# === Uploads locais (fotos de produto, comprovantes PIX) ===
+# Em produção isso fica num Volume do Railway, fora do git de qualquer forma;
+# isso aqui é só pra não versionar os arquivos de teste do seu ambiente local.
+backend/uploads/
+
 # === TypeScript ===
 *.tsbuildinfo
 

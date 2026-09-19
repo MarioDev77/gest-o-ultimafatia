@@ -1,34 +1,17 @@
 import { Router } from "express"
 import { z } from "zod"
-import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3"
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 import { pool } from "../db/pool"
-import { env } from "../config/env"
 import { requireAdmin, requireAuth } from "../middleware/auth"
 import { ApiError } from "../lib/errors"
+import { assertOwnedKey, buildViewUrl } from "../lib/localStorage"
 
 const router = Router()
 
-function assertOwnedKey(userId: string, key: string) {
-  const prefix = `private/${userId}/`
-  if (!key.startsWith(prefix)) {
-    throw new ApiError("Chave de foto inválida para este usuário", 403)
-  }
-}
-
-const s3 = new S3Client({
-  region: env.S3_REGION,
-  endpoint: env.S3_ENDPOINT,
-  forcePathStyle: Boolean(env.S3_ENDPOINT),
-  credentials: { accessKeyId: env.S3_ACCESS_KEY_ID, secretAccessKey: env.S3_SECRET_ACCESS_KEY },
-})
-
-// products.photo_key aponta pro bucket privado — sem isso o frontend não tem
-// como exibir a foto (mesma solução já usada em pix-receipts).
+// products.photo_key aponta pra pasta privada de uploads — sem isso o
+// frontend não tem como exibir a foto (mesma solução já usada em pix-receipts).
 async function attachPhotoUrl<T extends { photo_key: string | null }>(row: T): Promise<T & { photo_url: string | null }> {
   if (!row.photo_key) return { ...row, photo_url: null }
-  const url = await getSignedUrl(s3, new GetObjectCommand({ Bucket: env.S3_BUCKET, Key: row.photo_key }), { expiresIn: 300 })
-  return { ...row, photo_url: url }
+  return { ...row, photo_url: buildViewUrl(row.photo_key) }
 }
 
 async function attachPhotoUrls<T extends { photo_key: string | null }>(rows: T[]): Promise<Array<T & { photo_url: string | null }>> {
