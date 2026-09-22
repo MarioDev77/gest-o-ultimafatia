@@ -2,7 +2,7 @@ import { Router } from "express"
 import { z } from "zod"
 import { pool } from "../db/pool"
 import { requireAdmin, requireAuth } from "../middleware/auth"
-import { SalesServiceError, cancelSale, createSale } from "../services/salesService"
+import { SalesServiceError, cancelSale, createSale, deleteAllSales } from "../services/salesService"
 
 const router = Router()
 
@@ -239,6 +239,18 @@ router.post("/:id/cancel", requireAuth, requireAdmin, async (req, res, next) => 
     res.json({ status: "cancelada" })
   } catch (error) {
     if (error instanceof SalesServiceError) return res.status(error.status).json({ error: error.message })
+    next(error)
+  }
+})
+
+// Apaga de vez TODAS as vendas do sistema (não respeita os filtros da tela —
+// é um reset completo), devolvendo o estoque reservado por cada uma antes de
+// apagar. Ação irreversível, usada pelo botão "Apagar todas as vendas".
+router.delete("/", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const deleted = await deleteAllSales(pool)
+    res.json({ deleted })
+  } catch (error) {
     next(error)
   }
 })

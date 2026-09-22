@@ -1,17 +1,20 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { Plus, Search } from "lucide-react"
+import { Plus, Search, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { SaleFormDialog } from "@/components/sales/sale-form-dialog"
 import { SaleDetailDialog } from "@/components/sales/sale-detail-dialog"
 import { SaleEditDialog } from "@/components/sales/sale-edit-dialog"
 import { useApiQuery } from "@/lib/hooks/use-api-query"
+import { apiFetch, ApiClientError } from "@/lib/api-client"
+import { useToast } from "@/components/ui/toast"
 import { resolvePeriod } from "@/lib/period"
 import { formatCentsBRL, formatDateTimeBR } from "@/lib/format"
 import { PAYMENT_METHOD_LABELS } from "@/lib/types"
@@ -27,6 +30,8 @@ export default function VendasPage() {
   const [formOpen, setFormOpen] = useState(false)
   const [detailId, setDetailId] = useState<string | null>(null)
   const [editingSale, setEditingSale] = useState<SaleDetail | null>(null)
+  const [confirmDeleteAll, setConfirmDeleteAll] = useState(false)
+  const toast = useToast()
 
   const query = useMemo(() => {
     const params = new URLSearchParams({ from: range.from, to: range.to, limit: "100" })
@@ -46,14 +51,35 @@ export default function VendasPage() {
     refetch()
   }
 
+  async function handleDeleteAll() {
+    try {
+      const result = await apiFetch<{ deleted: number }>("/api/sales", { method: "DELETE" })
+      toast.add({ title: `${result.deleted} venda(s) apagada(s)`, type: "success" })
+      refetchAll()
+    } catch (err) {
+      toast.add({
+        title: "Não foi possível apagar as vendas",
+        description: err instanceof ApiClientError ? err.message : undefined,
+        type: "error",
+      })
+      throw err
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">{sales.length} venda(s) no mês atual</p>
-        <Button onClick={() => setFormOpen(true)}>
-          <Plus className="size-4" />
-          Nova Venda
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="destructive" onClick={() => setConfirmDeleteAll(true)}>
+            <Trash2 className="size-4" />
+            Apagar todas as vendas
+          </Button>
+          <Button onClick={() => setFormOpen(true)}>
+            <Plus className="size-4" />
+            Nova Venda
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -178,6 +204,15 @@ export default function VendasPage() {
       />
 
       <SaleEditDialog sale={editingSale} onOpenChange={(open) => !open && setEditingSale(null)} onSaved={refetchAll} />
+
+      <ConfirmDialog
+        open={confirmDeleteAll}
+        onOpenChange={setConfirmDeleteAll}
+        title="Apagar todas as vendas"
+        description="TODAS as vendas do sistema serão apagadas de vez (não só as desta lista/filtro), e o estoque reservado por elas será devolvido aos produtos. Essa ação não pode ser desfeita."
+        confirmLabel="Apagar tudo"
+        onConfirm={handleDeleteAll}
+      />
     </div>
   )
 }

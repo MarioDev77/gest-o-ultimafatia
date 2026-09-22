@@ -122,7 +122,11 @@ function WeekList({ onOpen }: { onOpen: (week: SaleWeek) => void }) {
         open={!!deleteTarget}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
         title="Excluir semana"
-        description={`A semana "${deleteTarget?.name ?? ""}" será excluída. Só é possível excluir semanas sem vendas registradas.`}
+        description={`A semana "${deleteTarget?.name ?? ""}" será excluída${
+          deleteTarget && deleteTarget.sales_count > 0
+            ? ` junto com ${deleteTarget.sales_count} venda(s) registrada(s) nela (o estoque será devolvido)`
+            : ""
+        }. Essa ação não pode ser desfeita.`}
         confirmLabel="Excluir"
         onConfirm={handleDelete}
       />

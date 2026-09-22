@@ -3,6 +3,7 @@ import { z } from "zod"
 import { pool } from "../db/pool"
 import { requireAdmin, requireAuth } from "../middleware/auth"
 import { ApiError } from "../lib/errors"
+import { deleteSalesByWeek } from "../services/salesService"
 
 const router = Router()
 
@@ -66,16 +67,17 @@ router.patch("/:id", requireAuth, requireAdmin, async (req, res, next) => {
   }
 })
 
-// Só exclui semana vazia: excluir uma semana com vendas faria elas perderem
-// a referência e sumirem do agrupamento. Pra remover, mova ou cancele as
-// vendas antes.
+// Excluir uma semana apaga de vez as vendas ligadas a ela (devolvendo o
+// estoque reservado por cada uma) e só então marca a semana como excluída.
+// Ação irreversível: não deixa as vendas "órfãs" nem pede pra mover antes.
 router.delete("/:id", requireAuth, requireAdmin, async (req, res, next) => {
   try {
     const id = z.string().uuid().parse(req.params.id)
-    const used = await pool.query("SELECT 1 FROM sales WHERE week_id = $1 AND deleted_at IS NULL LIMIT 1", [id])
-    if (used.rows[0]) {
-      throw new ApiError("Esta semana tem vendas registradas. Mova as vendas para outra semana antes de excluir.", 409)
-    }
+    const week = await pool.query("SELECT id FROM sale_weeks WHERE id = $1 AND deleted_at IS NULL", [id])
+    if (!week.rows[0]) return res.status(404).json({ error: "Semana não encontrada" })
+
+    await deleteSalesByWeek(pool, id)
+
     const result = await pool.query(
       "UPDATE sale_weeks SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1 AND deleted_at IS NULL RETURNING id",
       [id]

@@ -1,4 +1,4 @@
-import type { Pool } from "pg"
+import type { Pool, PoolClient } from "pg"
 import { ApiError } from "../lib/errors"
 
 // Mantido como alias pra não quebrar quem já importa SalesServiceError.
@@ -196,6 +196,70 @@ export async function cancelSale(pool: Pool, saleId: string) {
 
     await client.query("UPDATE sales SET status = 'cancelada', updated_at = NOW() WHERE id = $1", [saleId])
     await client.query("COMMIT")
+  } catch (error) {
+    await client.query("ROLLBACK")
+    throw error
+  } finally {
+    client.release()
+  }
+}
+
+// Devolve o estoque reservado por uma venda e apaga o registro de vez
+// (sale_items some junto, via ON DELETE CASCADE da FK). Diferente de
+// cancelSale: aqui a venda some do histórico, sem deixar rastro. Só deve
+// ser chamada a partir de uma operação explícita de limpeza (excluir
+// semana com vendas, apagar todas as vendas) — nunca automaticamente.
+async function hardDeleteSaleTx(client: PoolClient, saleId: string) {
+  const { rows: items } = await client.query(
+    "SELECT product_id, quantity FROM sale_items WHERE sale_id = $1",
+    [saleId]
+  )
+  for (const item of items) {
+    await client.query(
+      "UPDATE products SET stock_quantity = stock_quantity + $1, updated_at = NOW() WHERE id = $2",
+      [item.quantity, item.product_id]
+    )
+  }
+  await client.query("DELETE FROM sales WHERE id = $1", [saleId])
+}
+
+// Apaga de vez todas as vendas ligadas a uma semana (devolvendo estoque de
+// cada uma). Usada ao excluir uma semana que já tem vendas registradas —
+// antes disso, a exclusão da semana era bloqueada.
+export async function deleteSalesByWeek(pool: Pool, weekId: string) {
+  const client = await pool.connect()
+  try {
+    await client.query("BEGIN")
+    const { rows: sales } = await client.query(
+      "SELECT id FROM sales WHERE week_id = $1 AND deleted_at IS NULL FOR UPDATE",
+      [weekId]
+    )
+    for (const sale of sales) {
+      await hardDeleteSaleTx(client, sale.id)
+    }
+    await client.query("COMMIT")
+    return sales.length
+  } catch (error) {
+    await client.query("ROLLBACK")
+    throw error
+  } finally {
+    client.release()
+  }
+}
+
+// Apaga de vez todas as vendas do sistema (reset), devolvendo o estoque
+// reservado por cada uma. Ação irreversível, usada pelo botão "Apagar
+// todas as vendas" da aba Vendas.
+export async function deleteAllSales(pool: Pool) {
+  const client = await pool.connect()
+  try {
+    await client.query("BEGIN")
+    const { rows: sales } = await client.query("SELECT id FROM sales WHERE deleted_at IS NULL FOR UPDATE")
+    for (const sale of sales) {
+      await hardDeleteSaleTx(client, sale.id)
+    }
+    await client.query("COMMIT")
+    return sales.length
   } catch (error) {
     await client.query("ROLLBACK")
     throw error
