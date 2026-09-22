@@ -44,7 +44,15 @@ export function buildPdfReport(type: ReportType, data: any): Promise<Buffer> {
     doc.on("error", reject)
 
     doc.fontSize(18).font("Helvetica-Bold").text(REPORT_TITLES[type])
-    doc.fontSize(10).font("Helvetica").fillColor("#555").text(`Período: ${data.period.from} a ${data.period.to}`)
+    doc
+      .fontSize(10)
+      .font("Helvetica")
+      .fillColor("#555")
+      .text(
+        data.weekName
+          ? `Semana: ${data.weekName} (${data.period.from} a ${data.period.to})`
+          : `Período: ${data.period.from} a ${data.period.to}`
+      )
     doc.moveDown(1)
     doc.fillColor("#000")
 

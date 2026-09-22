@@ -45,7 +45,9 @@ export async function buildExcelReport(type: ReportType, data: any): Promise<Exc
   const summarySheet = workbook.addWorksheet("Resumo")
   summarySheet.columns = [{ width: 32 }, { width: 20 }]
   summarySheet.addRow([REPORT_TITLES[type]]).font = { bold: true, size: 14 }
-  summarySheet.addRow([`Período: ${data.period.from} a ${data.period.to}`])
+  summarySheet.addRow([
+    data.weekName ? `Semana: ${data.weekName} (${data.period.from} a ${data.period.to})` : `Período: ${data.period.from} a ${data.period.to}`,
+  ])
   summarySheet.addRow([])
 
   if (!hasAnyData(type, data)) {

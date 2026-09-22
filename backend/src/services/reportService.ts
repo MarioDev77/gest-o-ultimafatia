@@ -113,6 +113,69 @@ export async function getReportData(pool: Pool, type: ReportType, period: Period
   }
 }
 
+export async function getWeekSalesReportData(pool: Pool, weekId: string) {
+  const weekResult = await pool.query(
+    `SELECT id, name, created_at FROM sale_weeks WHERE id = $1 AND deleted_at IS NULL`,
+    [weekId]
+  )
+  const week = weekResult.rows[0]
+  if (!week) return null
+
+  const salesResult = await pool.query(
+    `SELECT sale_number, sale_datetime, customer_name, payment_method, subtotal_cents, discount_cents,
+            total_cents, total_cost_cents, status
+     FROM sales WHERE week_id = $1 AND deleted_at IS NULL ORDER BY sale_datetime ASC`,
+    [weekId]
+  )
+  const sales = salesResult.rows
+
+  // "Período" aqui é só pra exibir no cabeçalho do relatório (a semana não é
+  // um intervalo de datas fixo, é um agrupamento manual de vendas): usa a
+  // data da primeira e da última venda da semana, e cai pra data de criação
+  // da semana quando ainda não há nenhuma venda registrada nela.
+  const rangeResult = await pool.query(
+    `SELECT MIN(sale_datetime)::date AS from_date, MAX(sale_datetime)::date AS to_date
+     FROM sales WHERE week_id = $1 AND deleted_at IS NULL`,
+    [weekId]
+  )
+  const range = rangeResult.rows[0]
+  const toDateStr = (value: Date) => value.toISOString().slice(0, 10)
+  const from = range.from_date ? toDateStr(range.from_date) : toDateStr(week.created_at)
+  const to = range.to_date ? toDateStr(range.to_date) : toDateStr(week.created_at)
+
+  const completed = sales.filter((s) => s.status === "concluida")
+  const revenueCents = completed.reduce((sum, s) => sum + s.total_cents, 0)
+  const totalCostCents = completed.reduce((sum, s) => sum + s.total_cost_cents, 0)
+  const grossProfitCents = revenueCents - totalCostCents
+  const salesCount = completed.length
+  const cashRevenueCents = completed.filter((s) => s.payment_method === "dinheiro").reduce((sum, s) => sum + s.total_cents, 0)
+  const pixRevenueCents = completed.filter((s) => s.payment_method === "pix").reduce((sum, s) => sum + s.total_cents, 0)
+  const cardRevenueCents = completed.filter((s) => s.payment_method === "cartao").reduce((sum, s) => sum + s.total_cents, 0)
+
+  const summary = {
+    salesCount,
+    revenueCents,
+    totalCostCents,
+    grossProfitCents,
+    // Semana não carrega despesas próprias (só vendas), então lucro líquido
+    // aqui é igual ao lucro bruto — não é um "esquecimento", é o escopo do
+    // relatório por semana.
+    expensesCents: 0,
+    netProfitCents: grossProfitCents,
+    profitMarginPct: revenueCents > 0 ? Math.round((grossProfitCents / revenueCents) * 10000) / 100 : null,
+    averageTicketCents: salesCount > 0 ? Math.round(revenueCents / salesCount) : null,
+    averageCostPerSaleCents: salesCount > 0 ? Math.round(totalCostCents / salesCount) : null,
+    cashRevenueCents,
+    pixRevenueCents,
+    cardRevenueCents,
+    cashReceivedGrossCents: 0,
+    changeGivenCents: 0,
+    hasData: salesCount > 0,
+  }
+
+  return { type: "vendas" as const, weekName: week.name as string, period: { from, to }, summary, sales }
+}
+
 export const REPORT_TITLES: Record<ReportType, string> = {
   vendas: "Relatório de Vendas",
   despesas: "Relatório de Despesas",

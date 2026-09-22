@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { ArrowLeft, CalendarDays, Pencil, Plus, Trash2 } from "lucide-react"
+import { ArrowLeft, CalendarDays, FileDown, FileSpreadsheet, Loader2, Pencil, Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
@@ -12,11 +12,25 @@ import { SaleDetailDialog } from "@/components/sales/sale-detail-dialog"
 import { SaleEditDialog } from "@/components/sales/sale-edit-dialog"
 import { WeekFormDialog } from "@/components/weeks/week-form-dialog"
 import { useApiQuery } from "@/lib/hooks/use-api-query"
-import { apiFetch, ApiClientError } from "@/lib/api-client"
+import { apiFetch, ApiClientError, downloadFile } from "@/lib/api-client"
 import { useToast } from "@/components/ui/toast"
 import { formatCentsBRL, formatDateTimeBR } from "@/lib/format"
 import { PAYMENT_METHOD_LABELS } from "@/lib/types"
 import type { Sale, SaleDetail, SaleWeek } from "@/lib/types"
+
+function reportFilename(weekName: string, format: "pdf" | "excel") {
+  const safe = weekName
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "_")
+  return `vendas_${safe}.${format === "pdf" ? "pdf" : "xlsx"}`
+}
+
+async function downloadWeekReport(weekId: string, weekName: string, format: "pdf" | "excel") {
+  await downloadFile(`/api/reports/semana/${weekId}?format=${format}`, reportFilename(weekName, format))
+}
 
 export default function SemanasPage() {
   // Semana aberta no momento (null = tela com a lista de semanas). Guarda o
@@ -38,6 +52,7 @@ function WeekList({ onOpen }: { onOpen: (week: SaleWeek) => void }) {
   const [formOpen, setFormOpen] = useState(false)
   const [editingWeek, setEditingWeek] = useState<SaleWeek | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<SaleWeek | null>(null)
+  const [pendingReport, setPendingReport] = useState<string | null>(null)
 
   function openCreate() {
     setEditingWeek(null)
@@ -47,6 +62,22 @@ function WeekList({ onOpen }: { onOpen: (week: SaleWeek) => void }) {
   function openRename(week: SaleWeek) {
     setEditingWeek(week)
     setFormOpen(true)
+  }
+
+  async function handleDownloadReport(week: SaleWeek, format: "pdf" | "excel") {
+    const key = `${week.id}-${format}`
+    setPendingReport(key)
+    try {
+      await downloadWeekReport(week.id, week.name, format)
+    } catch (err) {
+      toast.add({
+        title: "Não foi possível gerar o relatório",
+        description: err instanceof ApiClientError ? err.message : undefined,
+        type: "error",
+      })
+    } finally {
+      setPendingReport(null)
+    }
   }
 
   async function handleDelete() {
@@ -95,6 +126,32 @@ function WeekList({ onOpen }: { onOpen: (week: SaleWeek) => void }) {
                     <p className="text-sm font-semibold">{week.name}</p>
                   </div>
                   <div className="flex items-center" onClick={(e) => e.stopPropagation()}>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label="Baixar relatório em PDF"
+                      disabled={pendingReport === `${week.id}-pdf`}
+                      onClick={() => handleDownloadReport(week, "pdf")}
+                    >
+                      {pendingReport === `${week.id}-pdf` ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : (
+                        <FileDown className="size-3.5" />
+                      )}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label="Baixar relatório em Excel"
+                      disabled={pendingReport === `${week.id}-excel`}
+                      onClick={() => handleDownloadReport(week, "excel")}
+                    >
+                      {pendingReport === `${week.id}-excel` ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : (
+                        <FileSpreadsheet className="size-3.5" />
+                      )}
+                    </Button>
                     <Button variant="ghost" size="icon-sm" aria-label="Renomear semana" onClick={() => openRename(week)}>
                       <Pencil className="size-3.5" />
                     </Button>
@@ -143,6 +200,23 @@ function WeekDetail({ week, onBack }: { week: { id: string; name: string }; onBa
   const [formOpen, setFormOpen] = useState(false)
   const [detailId, setDetailId] = useState<string | null>(null)
   const [editingSale, setEditingSale] = useState<SaleDetail | null>(null)
+  const [pendingReport, setPendingReport] = useState<"pdf" | "excel" | null>(null)
+  const toast = useToast()
+
+  async function handleDownloadReport(format: "pdf" | "excel") {
+    setPendingReport(format)
+    try {
+      await downloadWeekReport(week.id, week.name, format)
+    } catch (err) {
+      toast.add({
+        title: "Não foi possível gerar o relatório",
+        description: err instanceof ApiClientError ? err.message : undefined,
+        type: "error",
+      })
+    } finally {
+      setPendingReport(null)
+    }
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -158,10 +232,20 @@ function WeekDetail({ week, onBack }: { week: { id: string; name: string }; onBa
             </p>
           </div>
         </div>
-        <Button onClick={() => setFormOpen(true)}>
-          <Plus className="size-4" />
-          Cadastrar nova venda
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" disabled={pendingReport === "pdf"} onClick={() => handleDownloadReport("pdf")}>
+            {pendingReport === "pdf" ? <Loader2 className="size-4 animate-spin" /> : <FileDown className="size-4" />}
+            PDF
+          </Button>
+          <Button variant="outline" size="sm" disabled={pendingReport === "excel"} onClick={() => handleDownloadReport("excel")}>
+            {pendingReport === "excel" ? <Loader2 className="size-4 animate-spin" /> : <FileSpreadsheet className="size-4" />}
+            Excel
+          </Button>
+          <Button onClick={() => setFormOpen(true)}>
+            <Plus className="size-4" />
+            Cadastrar nova venda
+          </Button>
+        </div>
       </div>
 
       {isLoading ? (
