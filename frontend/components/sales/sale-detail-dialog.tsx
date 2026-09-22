@@ -32,6 +32,7 @@ export function SaleDetailDialog({
 }) {
   const { data: sale, isLoading } = useApiQuery<SaleDetail>(saleId ? `/api/sales/${saleId}` : null)
   const [confirmCancel, setConfirmCancel] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const toast = useToast()
 
   async function handleCancel() {
@@ -44,6 +45,23 @@ export function SaleDetailDialog({
     } catch (err) {
       toast.add({
         title: "Não foi possível cancelar",
+        description: err instanceof ApiClientError ? err.message : undefined,
+        type: "error",
+      })
+      throw err
+    }
+  }
+
+  async function handleDelete() {
+    if (!sale) return
+    try {
+      await apiFetch(`/api/sales/${sale.id}`, { method: "DELETE" })
+      toast.add({ title: "Venda excluída", type: "success" })
+      onChanged()
+      onOpenChange(false)
+    } catch (err) {
+      toast.add({
+        title: "Não foi possível excluir",
         description: err instanceof ApiClientError ? err.message : undefined,
         type: "error",
       })
@@ -152,11 +170,14 @@ export function SaleDetailDialog({
                     <Button variant="outline" onClick={() => onEdit(sale)}>
                       Editar
                     </Button>
-                    <Button variant="destructive" onClick={() => setConfirmCancel(true)}>
+                    <Button variant="outline" onClick={() => setConfirmCancel(true)}>
                       Cancelar venda
                     </Button>
                   </>
                 )}
+                <Button variant="destructive" onClick={() => setConfirmDelete(true)}>
+                  Excluir venda
+                </Button>
               </DialogFooter>
             </div>
           )}
@@ -170,6 +191,15 @@ export function SaleDetailDialog({
         description={`A venda #${sale?.sale_number} será marcada como cancelada e o estoque reservado será devolvido. Esta ação não pode ser desfeita.`}
         confirmLabel="Cancelar venda"
         onConfirm={handleCancel}
+      />
+
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title="Excluir venda"
+        description={`A venda #${sale?.sale_number} será apagada de vez (some do histórico e dos relatórios) e o estoque reservado será devolvido. Esta ação não pode ser desfeita.`}
+        confirmLabel="Excluir venda"
+        onConfirm={handleDelete}
       />
     </>
   )

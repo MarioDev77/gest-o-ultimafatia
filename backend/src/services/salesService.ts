@@ -208,19 +208,47 @@ export async function cancelSale(pool: Pool, saleId: string) {
 // (sale_items some junto, via ON DELETE CASCADE da FK). Diferente de
 // cancelSale: aqui a venda some do histórico, sem deixar rastro. Só deve
 // ser chamada a partir de uma operação explícita de limpeza (excluir
-// semana com vendas, apagar todas as vendas) — nunca automaticamente.
+// semana com vendas, apagar todas as vendas, excluir venda) — nunca
+// automaticamente. Só devolve estoque se a venda ainda estava "concluida":
+// uma venda "cancelada" já teve o estoque devolvido no cancelamento, então
+// devolver de novo aqui inflaria o estoque.
 async function hardDeleteSaleTx(client: PoolClient, saleId: string) {
-  const { rows: items } = await client.query(
-    "SELECT product_id, quantity FROM sale_items WHERE sale_id = $1",
-    [saleId]
-  )
-  for (const item of items) {
-    await client.query(
-      "UPDATE products SET stock_quantity = stock_quantity + $1, updated_at = NOW() WHERE id = $2",
-      [item.quantity, item.product_id]
+  const { rows: saleRows } = await client.query("SELECT status FROM sales WHERE id = $1", [saleId])
+  const wasCompleted = saleRows[0]?.status === "concluida"
+
+  if (wasCompleted) {
+    const { rows: items } = await client.query(
+      "SELECT product_id, quantity FROM sale_items WHERE sale_id = $1",
+      [saleId]
     )
+    for (const item of items) {
+      await client.query(
+        "UPDATE products SET stock_quantity = stock_quantity + $1, updated_at = NOW() WHERE id = $2",
+        [item.quantity, item.product_id]
+      )
+    }
   }
   await client.query("DELETE FROM sales WHERE id = $1", [saleId])
+}
+
+// Devolve o estoque de uma venda específica e apaga o registro de vez.
+// Usada pelo botão "Excluir venda" da tela de detalhe — diferente de
+// cancelSale, que mantém o histórico marcado como cancelada.
+export async function deleteSale(pool: Pool, saleId: string) {
+  const client = await pool.connect()
+  try {
+    await client.query("BEGIN")
+    const { rows } = await client.query("SELECT id FROM sales WHERE id = $1 AND deleted_at IS NULL FOR UPDATE", [saleId])
+    if (!rows[0]) throw new SalesServiceError("Venda não encontrada", 404)
+
+    await hardDeleteSaleTx(client, saleId)
+    await client.query("COMMIT")
+  } catch (error) {
+    await client.query("ROLLBACK")
+    throw error
+  } finally {
+    client.release()
+  }
 }
 
 // Apaga de vez todas as vendas ligadas a uma semana (devolvendo estoque de

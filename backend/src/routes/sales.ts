@@ -2,7 +2,7 @@ import { Router } from "express"
 import { z } from "zod"
 import { pool } from "../db/pool"
 import { requireAdmin, requireAuth } from "../middleware/auth"
-import { SalesServiceError, cancelSale, createSale, deleteAllSales } from "../services/salesService"
+import { SalesServiceError, cancelSale, createSale, deleteAllSales, deleteSale } from "../services/salesService"
 
 const router = Router()
 
@@ -237,6 +237,19 @@ router.post("/:id/cancel", requireAuth, requireAdmin, async (req, res, next) => 
     const id = z.string().uuid().parse(req.params.id)
     await cancelSale(pool, id)
     res.json({ status: "cancelada" })
+  } catch (error) {
+    if (error instanceof SalesServiceError) return res.status(error.status).json({ error: error.message })
+    next(error)
+  }
+})
+
+// Apaga de vez uma venda específica (devolve o estoque reservado por ela).
+// Diferente de /cancel: aqui a venda some do histórico, sem deixar rastro.
+router.delete("/:id", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const id = z.string().uuid().parse(req.params.id)
+    await deleteSale(pool, id)
+    res.status(204).send()
   } catch (error) {
     if (error instanceof SalesServiceError) return res.status(error.status).json({ error: error.message })
     next(error)
